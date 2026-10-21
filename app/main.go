@@ -24,34 +24,11 @@ func main() {
 		}
 
 		header := make([]byte, 100)
-
-		_, err = databaseFile.Read(header)
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		var pageSize uint16
-		if err := binary.Read(bytes.NewReader(header[16:18]), binary.BigEndian, &pageSize); err != nil {
-			fmt.Println("Failed to read integer:", err)
-			return
-		}
-
-		bTreeBuffer := make([]byte, 12)
-		if _, err := databaseFile.Seek(100, io.SeekStart); err != nil {
-			fmt.Println("Failed to seek:", err)
-			return
-		}
-
-		_, err = databaseFile.Read(bTreeBuffer)
+		pageSize = readDatabaseFile(databaseFile, header, 16, 18, 0)
 
 		var tableCount uint16
-		if err := binary.Read(bytes.NewReader(bTreeBuffer[3:5]), binary.BigEndian, &tableCount); err != nil {
-			fmt.Println("Failed to read b tree:", err)
-			return
-		}
-
-		// You can use print statements as follows for debugging, they'll be visible when running tests.
-		//fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+		tableCount = readDatabaseFile(databaseFile, header, 3, 5, 100)
 
 		fmt.Printf("database page size: %v\n", pageSize)
 		fmt.Printf("number of tables: %v\n", tableCount)
@@ -59,4 +36,24 @@ func main() {
 		fmt.Println("Unknown command", command)
 		os.Exit(1)
 	}
+}
+
+func readDatabaseFile(databaseFile *os.File, byteArray []byte, lowerBound, upperBound, offset int) (value uint16) {
+	if _, err := databaseFile.Seek(int64(offset), io.SeekStart); err != nil {
+		fmt.Println("Failed to seek:", err)
+		return
+	}
+
+	_, err := databaseFile.Read(byteArray)
+	if err != nil {
+		fmt.Println("Failed to read:", err)
+		return
+	}
+
+	if err := binary.Read(bytes.NewReader(byteArray[lowerBound:upperBound]), binary.BigEndian, &value); err != nil {
+		fmt.Println("Failed to read value:", err)
+		return
+	}
+
+	return value
 }
