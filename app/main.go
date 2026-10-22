@@ -17,39 +17,9 @@ func main() {
 
 	switch command {
 	case ".dbinfo":
-		databaseFile, err := os.Open(databaseFilePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		header := make([]byte, 100)
-
-		_, err = databaseFile.Read(header)
-		if err != nil {
-			fmt.Println("database file is corrupted")
-		}
-
-		var pageSize uint16
-		pageSize, err = iterBuffer(header, 16, 18)
-		if err != nil {
-			fmt.Println("database file is corrupted")
-		}
-
-		buffer := make([]byte, pageSize)
-		_, err = databaseFile.ReadAt(buffer, 0)
-		if err != nil {
-			fmt.Println("database file is corrupted")
-		}
-
-		var tableCount uint16
-		tableCount, err = iterBuffer(buffer, 103, 105)
-		if err != nil {
-			fmt.Println("Failed to read value:", err)
-		}
-
-		fmt.Printf("database page size: %v\n", pageSize)
-		fmt.Printf("number of tables: %v\n", tableCount)
-
+		gatherInfo(databaseFilePath)
+	case ".tables":
+		tableCount, buffer := gatherInfo(databaseFilePath)
 		for i := 0; i < int(tableCount); i++ {
 			// ptr is the offset of the table pointer in the buffer
 			ptr, err := iterBuffer(buffer, 108+i*2, 110+i*2)
@@ -65,10 +35,46 @@ func main() {
 			end := start + int((secondTypeCode-13)/2)
 			fmt.Println(string(buffer[start:end]))
 		}
+
 	default:
 		fmt.Println("Unknown command", command)
 		os.Exit(1)
 	}
+}
+
+func gatherInfo(databaseFilePath string) (tableCount uint16, buffer []byte) {
+	databaseFile, err := os.Open(databaseFilePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	header := make([]byte, 100)
+
+	_, err = databaseFile.Read(header)
+	if err != nil {
+		fmt.Println("database file is corrupted")
+	}
+
+	var pageSize uint16
+	pageSize, err = iterBuffer(header, 16, 18)
+	if err != nil {
+		fmt.Println("database file is corrupted")
+	}
+
+	buffer = make([]byte, pageSize)
+	_, err = databaseFile.ReadAt(buffer, 0)
+	if err != nil {
+		fmt.Println("database file is corrupted")
+	}
+
+	tableCount, err = iterBuffer(buffer, 103, 105)
+	if err != nil {
+		fmt.Println("Failed to read value:", err)
+	}
+
+	fmt.Printf("database page size: %v\n", pageSize)
+	fmt.Printf("number of tables: %v\n", tableCount)
+	return
 }
 
 func iterBuffer(buffer []byte, lower, upper int) (pointer uint16, err error) {
