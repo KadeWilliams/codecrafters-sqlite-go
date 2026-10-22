@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	// Available if you need it!
@@ -24,36 +23,55 @@ func main() {
 		}
 
 		header := make([]byte, 100)
+
+		_, err = databaseFile.Read(header)
+		if err != nil {
+			fmt.Println("database file is corrupted")
+		}
+
 		var pageSize uint16
-		pageSize = readDatabaseFile(databaseFile, header, 16, 18, 0)
+		pageSize, err = iterBuffer(header, 16, 18)
+		if err != nil {
+			fmt.Println("database file is corrupted")
+		}
+
+		buffer := make([]byte, pageSize)
+		_, err = databaseFile.ReadAt(buffer, 0)
+		if err != nil {
+			fmt.Println("database file is corrupted")
+		}
 
 		var tableCount uint16
-		tableCount = readDatabaseFile(databaseFile, header, 3, 5, 100)
+		tableCount, err = iterBuffer(buffer, 103, 105)
+		if err != nil {
+			fmt.Println("Failed to read value:", err)
+		}
 
 		fmt.Printf("database page size: %v\n", pageSize)
 		fmt.Printf("number of tables: %v\n", tableCount)
+
+		for i := 0; i < int(tableCount); i++ {
+			// ptr is the offset of the table pointer in the buffer
+			ptr, err := iterBuffer(buffer, 108+i*2, 110+i*2)
+			if err != nil {
+				fmt.Println("Failed to read value:", err)
+			}
+
+			headerStart := ptr + 2
+			headerSize := buffer[headerStart]
+			firstTypeCode := buffer[headerStart+1]
+			secondTypeCode := buffer[headerStart+2]
+			start := int(headerStart) + int(headerSize) + int((firstTypeCode-13)/2)
+			end := start + int((secondTypeCode-13)/2)
+			fmt.Println(string(buffer[start:end]))
+		}
 	default:
 		fmt.Println("Unknown command", command)
 		os.Exit(1)
 	}
 }
 
-func readDatabaseFile(databaseFile *os.File, byteArray []byte, lowerBound, upperBound, offset int) (value uint16) {
-	if _, err := databaseFile.Seek(int64(offset), io.SeekStart); err != nil {
-		fmt.Println("Failed to seek:", err)
-		return
-	}
-
-	_, err := databaseFile.Read(byteArray)
-	if err != nil {
-		fmt.Println("Failed to read:", err)
-		return
-	}
-
-	if err := binary.Read(bytes.NewReader(byteArray[lowerBound:upperBound]), binary.BigEndian, &value); err != nil {
-		fmt.Println("Failed to read value:", err)
-		return
-	}
-
-	return value
+func iterBuffer(buffer []byte, lower, upper int) (pointer uint16, err error) {
+	err = binary.Read(bytes.NewReader(buffer[lower:upper]), binary.BigEndian, &pointer)
+	return
 }
